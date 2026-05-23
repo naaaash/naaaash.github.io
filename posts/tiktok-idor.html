@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en"><head>
+<title>A Tale of Confusing IDOR</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 16px;
+    color: #c9cdd3;
+    background: transparent;
+    padding: 0;
+    max-width: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* --- SIDE NAV --- */
+.sidenav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    height: 100vh;
+    background: rgba(10, 12, 18, 0.85);
+    border-right: 1px solid #1e2130;
+    padding: 28px 20px;
+    overflow-y: auto;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidenav-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none !important;
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #1e2130;
+}
+
+.sidenav-logo:hover .name {
+    text-decoration: underline;
+    text-decoration-color: #5eead4;
+    text-underline-offset: 4px;
+}
+
+.sidenav-logo .prompt {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8b5cf6;
+}
+
+.sidenav-logo .prompt .cursor { animation: blink 1s step-end infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+.sidenav-section { margin-bottom: 28px; }
+
+.sidenav-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #555;
+    margin-bottom: 0;
+    padding: 8px 0;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidenav-section-title::after { content: '\25B8'; font-size: 10px; transition: transform 0.2s; }
+.sidenav-section:hover .sidenav-section-title::after { transform: rotate(90deg); }
+
+.sidenav-toc { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+.sidenav-section:hover .sidenav-toc { max-height: 500px; }
+
+.sidenav-toc a {
+    display: block;
+    font-size: 13px;
+    color: #666;
+    text-decoration: none;
+    padding: 6px 0 6px 12px;
+    border-left: 2px solid transparent;
+    transition: all 0.2s;
+    line-height: 1.4;
+}
+
+.sidenav-toc a:hover { color: #5eead4; border-left-color: #5eead4; text-decoration: none; }
+.sidenav-toc a.active { color: #5eead4; border-left-color: #5eead4; }
+
+.sidenav-posts { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+.sidenav-section:hover .sidenav-posts { max-height: 400px; }
+
+.sidenav-posts a {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    text-decoration: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.2s;
+    margin-bottom: 4px;
+}
+
+.sidenav-posts a:hover { background: rgba(255,255,255,0.04); text-decoration: none; }
+.sidenav-posts a.current { background: rgba(45,212,191,0.08); }
+
+.sidenav-posts .dot { width: 6px; height: 6px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.sidenav-posts .dot.purple { background: #a78bfa; }
+.sidenav-posts .dot.red { background: #f87171; }
+.sidenav-posts .dot.teal { background: #5eead4; }
+
+.sidenav-posts .post-title { font-size: 13px; color: #888; line-height: 1.4; transition: color 0.2s; }
+.sidenav-posts a:hover .post-title { color: #c9cdd3; }
+.sidenav-posts a.current .post-title { color: #e2e5ea; font-weight: 500; }
+
+.sidenav-bottom {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid #1e2130;
+}
+
+.sidenav-bottom a {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #555;
+    text-decoration: none;
+    padding: 6px 0;
+    transition: color 0.2s;
+}
+
+.sidenav-bottom a:hover { color: #5eead4; text-decoration: none; }
+
+/* --- MAIN CONTENT --- */
+.post-wrapper {
+    max-width: 760px;
+    padding: 40px 30px 80px;
+    margin-left: max(290px, calc(260px + (100vw - 1020px) / 2));
+    margin-right: auto;
+}
+
+.back { display: none; }
+
+h1 { font-size: 32px; font-weight: 800; color: #fff; line-height: 1.25; margin-bottom: 12px; }
+.meta { color: #666; font-size: 14px; font-weight: 500; margin-bottom: 40px; padding-bottom: 30px; border-bottom: 1px solid #1e2130; }
+h2 { font-size: 22px; font-weight: 700; color: #fff; margin-top: 48px; margin-bottom: 16px; scroll-margin-top: 24px; }
+h3 { font-size: 18px; font-weight: 700; color: #fff; margin-top: 36px; margin-bottom: 12px; }
+p, li { font-size: 17px; line-height: 1.75; color: #b0b5bd; margin-bottom: 16px; }
+li { margin-bottom: 8px; }
+ul, ol { padding-left: 24px; margin-bottom: 16px; }
+a { color: #5eead4; text-decoration: none; }
+a:hover { color: #99f6e4; text-decoration: underline; }
+strong, b { color: #e2e5ea; font-weight: 600; }
+em { font-style: italic; color: #9ca0a8; }
+
+code {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 14px;
+    background: rgba(45, 212, 191, 0.1);
+    color: #5eead4;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(45, 212, 191, 0.15);
+}
+
+pre { background: #161822; border: 1px solid #1e2130; border-radius: 10px; padding: 20px 24px; overflow-x: auto; margin: 20px 0 24px; line-height: 1.6; }
+pre code { background: none; border: none; padding: 0; color: #c9cdd3; font-size: 14px; }
+pre code .k { color: #f472b6; }
+pre code .s { color: #a6e22e; }
+pre code .f { color: #66d9ef; }
+pre code .c { color: #636678; font-style: italic; }
+pre code .n { color: #ae81ff; }
+pre code .p { color: #fd971f; }
+
+blockquote { border-left: 3px solid #2dd4bf; margin: 24px 0; padding: 12px 20px; background: rgba(45, 212, 191, 0.05); border-radius: 0 8px 8px 0; }
+blockquote p { color: #9ca0a8; margin-bottom: 0; }
+hr { border: none; border-top: 1px solid #1e2130; margin: 48px 0; }
+
+img { display: block; max-width: 100%; height: auto; margin: 20px auto; border-radius: 10px; border: 1px solid #1e2130; }
+
+/* --- MOBILE --- */
+.mobile-header {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #0c0e14;
+    border-bottom: 1px solid #1e2130;
+    padding: 12px 20px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mobile-header .logo { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #fff; font-weight: 700; font-size: 16px; }
+.mobile-header .prompt { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 13px; font-weight: 700; color: #8b5cf6; }
+.mobile-header .prompt .cursor { animation: blink 1s step-end infinite; }
+.menu-btn { background: none; border: 1px solid #1e2130; border-radius: 6px; padding: 6px 10px; color: #888; cursor: pointer; font-size: 18px; transition: color 0.2s, border-color 0.2s; }
+.menu-btn:hover { color: #fff; border-color: #555; }
+.sidenav-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 99; }
+
+@media (max-width: 1060px) {
+    .sidenav { transform: translateX(-100%); transition: transform 0.3s ease; }
+    .sidenav.open { transform: translateX(0); }
+    .sidenav-overlay.open { display: block; }
+    .mobile-header { display: flex; }
+    .post-wrapper { margin-left: 0; padding: 24px 20px 60px; }
+    h1 { font-size: 24px; }
+    pre { padding: 14px 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="mobile-header">
+    <a class="logo" href="../"><span class="prompt">&gt;<span class="cursor">_</span></span> <span class="name">naaash</span></a>
+    <button class="menu-btn" onclick="toggleNav()">&#9776;</button>
+</div>
+
+<div class="sidenav-overlay" onclick="toggleNav()"></div>
+<nav class="sidenav">
+    <a class="sidenav-logo" href="../"><span class="prompt">&gt;<span class="cursor">_</span></span> <span class="name">naaash</span></a>
+
+    <div class="sidenav-section">
+        <div class="sidenav-section-title">On this page</div>
+        <div class="sidenav-toc">
+            <a href="#background">Background</a>
+            <a href="#description">Description</a>
+            <a href="#request">Vulnerable HTTP Request</a>
+            <a href="#steps">Steps to Reproduce</a>
+            <a href="#timeline">Timeline</a>
+            <a href="#handles">Handles</a>
+        </div>
+    </div>
+
+    <div class="sidenav-section">
+        <div class="sidenav-section-title">All Posts</div>
+        <div class="sidenav-posts">
+            <a href="oauth-redirect-bypass.html">
+                <span class="dot purple"></span>
+                <span class="post-title">How a Single @ Symbol Turned Into a 1-Click Account Takeover</span>
+            </a>
+            <a href="adobe-workfront.html">
+                <span class="dot red"></span>
+                <span class="post-title">Making Almost $50,000 In Bounties From The Adobe VIP Program</span>
+            </a>
+            <a href="tiktok-idor.html" class="current">
+                <span class="dot teal"></span>
+                <span class="post-title">A Tale of Confusing IDOR</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="sidenav-bottom">
+        <a href="https://x.com/_naaash_" target="_blank">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            @_naaash_
+        </a>
+        <a href="https://hackerone.com/naaash" target="_blank">
+            <svg viewBox="0 0 14 24" width="12" height="14" fill="currentColor"><path d="M2.83151 0.29796C2.49766 0.0989079 2.13142 0 1.66552 0C1.16599 0 0.766114 0.0989079 0.465897 0.29796C0.166926 0.495776 0 0.760354 0 1.0917V22.8762C0 23.1407 0.166926 23.4053 0.465897 23.6365C0.799749 23.8677 1.16599 24 1.63189 24C2.0492 24.0012 2.45655 23.8739 2.79787 23.6365C3.13048 23.4053 3.29741 23.1407 3.29741 22.8762V1.0917C3.33104 0.760354 3.16411 0.495776 2.83151 0.29796ZM5.59575 11.7354C5.39643 11.9345 5.29553 12.199 5.3628 12.5947C5.39643 12.9915 5.56211 13.355 5.89597 13.6864C6.19494 14.0165 6.56118 14.2477 6.96105 14.3478C7.36093 14.4467 7.66114 14.38 7.86046 14.2155L9.62563 13.1238V22.8762C9.62563 23.1407 9.79256 23.4053 10.0928 23.6365C10.3917 23.8677 10.7916 24 11.2575 24C11.7247 24 12.1245 23.8677 12.4571 23.6365C12.7897 23.4053 12.9567 23.1407 12.9567 22.8762V9.71893C12.9567 9.38883 12.7897 9.15763 12.4571 8.95858C12.1245 8.76076 11.7247 8.66185 11.2251 8.66185C10.7256 8.66185 10.3594 8.76076 10.0591 8.95858L5.59575 11.7354Z"/></svg>
+            HackerOne
+        </a>
+        <a href="https://www.linkedin.com/in/avinashsudheer/" target="_blank">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+        </a>
+    </div>
+</nav>
+
+<div class="post-wrapper">
+
+<a class="back" href="../">&larr; Back to all posts</a>
+
+<h1>A Tale of Confusing IDOR</h1>
+<div class="meta">Bug Bounty Research &middot; TikTok Business</div>
+
+<h2 id="background">Background</h2>
+
+<p>Hi!!</p>
+
+<p>I have been bug hunting and researching web &amp; mobile application for a while now. I used to mainly target private program either on <a href="https://hackerone.com/naaash">Hackerone</a> or <a href="https://platform.synack.com/profile/naaash">Synack</a>, but recently I'd decided to make a switch to public programs because -</p>
+
+<ol>
+<li>They pay waaayyy more than private programs.</li>
+<li>It's more challenging to come across a bug since the same application is tested at least a million times.</li>
+<li>It helps me to make content about the bugs I come across so that I can give something back to the community.</li>
+</ol>
+
+<h2 id="description">Description</h2>
+
+<p>TikTok Business allows its users to create "Advertiser Accounts". The user can then edit, manage roles of other users or delete that particular advertiser account as per their needs. The deleting functionality was surprisingly available to the "Analyst" role (lower privileged) user as well. All that the lower privileged user had to do was to click on the "Close Account" button and the advertiser account would be closed even though this functionality was only available to the admin of the advertiser account. I much later realised that this is an IDOR since no prior authorisation was needed since the same HTTP request could be replayed with the different value of the <code>"account_id"</code> parameter and that would close some other user's advertiser account.</p>
+
+<h2 id="request">Vulnerable HTTP Request</h2>
+
+<pre><code><span class="k">POST</span> <span class="s">/api/v2/bm/account/close/?org_id=XXX</span> <span class="f">HTTP/2</span>
+<span class="p">Host</span>: business.tiktok.com
+<span class="p">Cookie</span>: REDACTED
+<span class="p">User-Agent</span>: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:98.0) Gecko/20100101 Firefox/98.0
+<span class="p">Accept</span>: application/json, text/plain, */*
+<span class="p">Accept-Language</span>: en-US,en;q=0.5
+<span class="p">Accept-Encoding</span>: gzip, deflate
+<span class="p">Referer</span>: https://business.tiktok.com/manage/account?org_id=XXX
+<span class="p">Content-Type</span>: application/json;charset=utf-8
+<span class="p">X-Csrftoken</span>: REDACTED
+<span class="p">Content-Length</span>: <span class="n">67</span>
+<span class="p">Origin</span>: https://business.tiktok.com
+
+{<span class="s">"account_id"</span>:<span class="s">"YYY"</span>,<span class="s">"org_id"</span>:<span class="s">"XXX"</span>}</code></pre>
+
+<h2 id="steps">Steps to Reproduce</h2>
+
+<ol>
+<li>Go to <a href="https://business.tiktok.com/">https://business.tiktok.com/</a> and log in to your account.</li>
+<li>Go to "Advertiser accounts" section and click on any of the available advertiser accounts.</li>
+<li>Click on the "Close" button.</li>
+</ol>
+
+<img src="https://quip.com/blob/RbaAAAnQXXV/iL9XOIoJPiG2Na6J70dwmw?a=UqzqjdU3ayodUrDBXGWByQbik0ARkwS2yqINa48X4dsa" width="800" height="266" alt="Close button location">
+
+<ol start="4">
+<li>Intercept the vulnerable HTTP request using Burp Suite.</li>
+<li>Change the value of the <code>"account_id"</code> parameter to other user's advertiser account ID.</li>
+<li>Forward the request. The response will display a confirmation message.</li>
+</ol>
+
+<img src="https://quip.com/blob/RbaAAAnQXXV/3aALP58xyfp-mIwcDca9uA?a=axSa5ps8daBiEqpinZTNK2AOaf3K0NGmIbg1ZYAoILQa" width="800" height="325" alt="Burp Suite intercept">
+
+<ol start="7">
+<li>The other user's advertiser account will then be closed.</li>
+</ol>
+
+<img src="https://quip.com/blob/RbaAAAnQXXV/fQ5scwiN79egv5YnA2edkA?a=9271hDxDtrhWhUqOfCGQT6fIjj3mcr4N0uoXSkVvgWka" width="800" height="244" alt="Account closed confirmation">
+
+<h2 id="timeline">Timeline</h2>
+
+<ul>
+<li>10th March - Bug reported to TikTok</li>
+<li>15th March - Mentioned that it's an IDOR instead of Privilege Escalation.</li>
+<li>15th March to 14th April - Had to help Hackerone's triager since for some reason the "Close" button wasn't available on their end.</li>
+<li>15th April - Triaged</li>
+<li>19th April - Severity reduced from 6.5 to 5.3 since the value of the <code>"account_id"</code> parameter is a 19 digit non-incremental value</li>
+<li>25th April - Resolved</li>
+<li>27th April - Bounty awarded</li>
+<li>3rd May - Requested for disclosure</li>
+<li>17th May - Report disclosed on <a href="https://hackerone.com/reports/1505567">Hackerone</a></li>
+</ul>
+
+<h2 id="handles">Handles</h2>
+
+<p>You can reach-out to me on any of these platforms -</p>
+
+<ul>
+<li>Twitter - <a href="https://twitter.com/_naaash_">https://twitter.com/_naaash_</a></li>
+<li>LinkedIn - <a href="https://www.linkedin.com/in/avinashsudheer">https://www.linkedin.com/in/avinashsudheer</a></li>
+</ul>
+
+</div>
+
+<script>
+function toggleNav() {
+    document.querySelector('.sidenav').classList.toggle('open');
+    document.querySelector('.sidenav-overlay').classList.toggle('open');
+}
+document.querySelectorAll('.sidenav-toc a').forEach(function(link) {
+    link.addEventListener('click', function() { if (window.innerWidth <= 1060) toggleNav(); });
+});
+var tocLinks = document.querySelectorAll('.sidenav-toc a');
+var headings = [];
+tocLinks.forEach(function(link) {
+    var id = link.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: link });
+});
+window.addEventListener('scroll', function() {
+    var scrollPos = window.scrollY + 80;
+    var current = null;
+    headings.forEach(function(h) { if (h.el.offsetTop <= scrollPos) current = h; });
+    tocLinks.forEach(function(l) { l.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+});
+</script>
+<canvas id="bg" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none;background:#0c0e14;"></canvas>
+<script>
+(function() {
+    var c = document.getElementById('bg'), ctx = c.getContext('2d'), w, h;
+    var palette = ['#5eead4','#2dd4bf','#14b8a6','#99f6e4','#0d9488'];
+    function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    var lines = [];
+    for (var i = 0; i < 70; i++) lines.push({ x:0, y:0, len:0, hz:true, a:0, t:0, col:palette[0], tm: Math.random()*60 });
+    var chars = [];
+    for (var i = 0; i < 35; i++) chars.push({ x:0, y:0, ch:'', a:0, t:0, tm: Math.random()*40, col:palette[0], sz:12 });
+    var gl = '01@#$%&*></{}>_~;:=+!?root$ssh://0xDEAD0xBEEF'.split('');
+    function draw() {
+        ctx.clearRect(0, 0, w, h);
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i];
+            if (--l.tm <= 0) {
+                if (l.a < 0.02) { l.x = Math.random()*w; l.y = Math.random()*h; l.len = Math.random()*200+40; l.hz = Math.random()>0.4; l.t = Math.random()*0.5+0.15; l.tm = Math.random()*15+3; l.col = palette[Math.floor(Math.random()*palette.length)]; }
+                else { l.t = 0; l.tm = Math.random()*60+20; }
+            }
+            l.a += (l.t - l.a) * 0.15;
+            if (l.a > 0.01) { ctx.strokeStyle = l.col; ctx.globalAlpha = l.a; ctx.lineWidth = Math.random()<0.2 ? 2.5 : 1; ctx.beginPath(); if (l.hz) { ctx.moveTo(l.x, l.y); ctx.lineTo(l.x+l.len, l.y); } else { ctx.moveTo(l.x, l.y); ctx.lineTo(l.x, l.y+l.len); } ctx.stroke(); }
+        }
+        for (var i = 0; i < chars.length; i++) {
+            var ch = chars[i];
+            if (--ch.tm <= 0) {
+                if (ch.a < 0.02) { ch.x = Math.random()*w; ch.y = Math.random()*h; ch.ch = gl[Math.floor(Math.random()*gl.length)]; ch.t = Math.random()*0.6+0.15; ch.tm = Math.random()*10+2; ch.col = palette[Math.floor(Math.random()*palette.length)]; ch.sz = [11,13,15,18][Math.floor(Math.random()*4)]; }
+                else { ch.t = 0; ch.tm = Math.random()*50+15; }
+            }
+            ch.a += (ch.t - ch.a) * 0.15;
+            if (ch.a > 0.01) { ctx.globalAlpha = ch.a; ctx.fillStyle = ch.col; ctx.font = ch.sz + 'px JetBrains Mono,monospace'; ctx.fillText(ch.ch, ch.x, ch.y); }
+        }
+        if (Math.random() < 0.06) { ctx.globalAlpha = Math.random()*0.2+0.08; ctx.fillStyle = palette[Math.floor(Math.random()*palette.length)]; ctx.fillRect(0, Math.random()*h, w, Math.random()*3+1); }
+        if (Math.random() < 0.02) { ctx.globalAlpha = Math.random()*0.08+0.03; ctx.fillStyle = palette[Math.floor(Math.random()*palette.length)]; ctx.fillRect(Math.random()*w, Math.random()*h, Math.random()*300+50, Math.random()*20+5); }
+        ctx.globalAlpha = 1; requestAnimationFrame(draw);
+    }
+    draw();
+})();
+</script>
+</body></html>

